@@ -70,7 +70,7 @@ const GenerateProgramPage = () => {
     const handleMessage = (message: any) => {
       if (message.type === "transcript" && message.transcriptType === "final") {
         const newMessage = { content: message.transcript, role: message.role };
-        setMessages((prev) => [...prev, newMessage]);
+        setMessages((prev: any) => [...prev, newMessage]);
       }
     };
 
@@ -207,7 +207,7 @@ const GenerateProgramPage = () => {
             className="w-full bg-card/90 backdrop-blur-sm border border-border rounded-xl p-4 mb-8 h-64 overflow-y-auto transition-all duration-300 scroll-smooth"
           >
             <div className="space-y-3">
-              {messages.map((msg, index) => (
+              {messages.map((msg: any, index: any) => (
                 <div key={index} className="message-item animate-fadeIn">
                   <div className="font-semibold text-xs text-muted-foreground mb-1">{msg.role === "assistant" ? "RepBot" : "You"}:</div>
                   <p className="text-foreground">{msg.content}</p>
