@@ -4,14 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { vapi } from "@/lib/vapi";
 import { useUser } from "@clerk/nextjs";
-import { redirect, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 const GenerateProgramPage = () => {
   const [callActive, setCallActive] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [messages, setMessages] = useState<any>([]);
+  const [messages, setMessages] = useState<any[]>([]);
   const [callEnded, setCallEnded] = useState(false);
 
   const { user } = useUser();
@@ -19,12 +19,34 @@ const GenerateProgramPage = () => {
 
   const messageContainerRef = useRef<HTMLDivElement>(null);
 
+  // SOLUTION to get rid of "Meeting has ended" error
+  useEffect(() => {
+    const originalError = console.error;
+    // override console.error to ignore "Meeting has ended" errors
+    console.error = function (msg, ...args) {
+      if (msg && (msg.includes("Meeting has ended") || (args[0] && args[0].toString().includes("Meeting has ended")))) {
+        console.log("Ignoring known error: Meeting has ended");
+        return; // don't pass to original handler
+      }
+
+      // pass all other errors to the original handler
+      return originalError.call(console, msg, ...args);
+    };
+
+    // restore original handler on unmount
+    return () => {
+      console.error = originalError;
+    };
+  }, []);
+
+  // auto-scroll messages
   useEffect(() => {
     if (messageContainerRef.current) {
-      messageContainerRef.current.scrollTop = messageContainerRef.current?.scrollHeight;
+      messageContainerRef.current.scrollTop = messageContainerRef.current.scrollHeight;
     }
   }, [messages]);
 
+  // navigate user to profile page after the call ends
   useEffect(() => {
     if (callEnded) {
       const redirectTimer = setTimeout(() => {
@@ -33,11 +55,12 @@ const GenerateProgramPage = () => {
 
       return () => clearTimeout(redirectTimer);
     }
-  }, []);
+  }, [callEnded, router]);
 
+  // setup event listeners for vapi
   useEffect(() => {
     const handleCallStart = () => {
-      console.log("Call Started");
+      console.log("Call started");
       setConnecting(false);
       setCallActive(true);
       setCallEnded(false);
@@ -46,32 +69,31 @@ const GenerateProgramPage = () => {
     const handleCallEnd = () => {
       console.log("Call ended");
       setCallActive(false);
-      setCallEnded(true);
       setConnecting(false);
       setIsSpeaking(false);
+      setCallEnded(true);
     };
 
     const handleSpeechStart = () => {
-      console.log("AI started speaking");
+      console.log("AI started Speaking");
       setIsSpeaking(true);
     };
 
     const handleSpeechEnd = () => {
-      console.log("AI stopped speaking");
+      console.log("AI stopped Speaking");
       setIsSpeaking(false);
     };
-
-    const handleError = (error: any) => {
-      console.log("Vapi Error: ", error);
-      setConnecting(false);
-      setCallActive(false);
-    };
-
     const handleMessage = (message: any) => {
       if (message.type === "transcript" && message.transcriptType === "final") {
         const newMessage = { content: message.transcript, role: message.role };
-        setMessages((prev: any) => [...prev, newMessage]);
+        setMessages((prev) => [...prev, newMessage]);
       }
+    };
+
+    const handleError = (error: any) => {
+      console.log("Vapi Error", error);
+      setConnecting(false);
+      setCallActive(false);
     };
 
     vapi
@@ -82,14 +104,15 @@ const GenerateProgramPage = () => {
       .on("message", handleMessage)
       .on("error", handleError);
 
-    // ✅ Proper cleanup
+    // cleanup event listeners on unmount
     return () => {
-      vapi.off("call-start", handleCallStart);
-      vapi.off("call-end", handleCallEnd);
-      vapi.off("speech-start", handleSpeechStart);
-      vapi.off("speech-end", handleSpeechEnd);
-      vapi.off("message", handleMessage);
-      vapi.off("error", handleError);
+      vapi
+        .off("call-start", handleCallStart)
+        .off("call-end", handleCallEnd)
+        .off("speech-start", handleSpeechStart)
+        .off("speech-end", handleSpeechEnd)
+        .off("message", handleMessage)
+        .off("error", handleError);
     };
   }, []);
 
@@ -207,7 +230,7 @@ const GenerateProgramPage = () => {
             className="w-full bg-card/90 backdrop-blur-sm border border-border rounded-xl p-4 mb-8 h-64 overflow-y-auto transition-all duration-300 scroll-smooth"
           >
             <div className="space-y-3">
-              {messages.map((msg: any, index: any) => (
+              {messages.map((msg, index) => (
                 <div key={index} className="message-item animate-fadeIn">
                   <div className="font-semibold text-xs text-muted-foreground mb-1">{msg.role === "assistant" ? "RepBot" : "You"}:</div>
                   <p className="text-foreground">{msg.content}</p>
@@ -242,5 +265,4 @@ const GenerateProgramPage = () => {
     </div>
   );
 };
-
 export default GenerateProgramPage;
